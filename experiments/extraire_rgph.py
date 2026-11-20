@@ -2,23 +2,17 @@
 
 import argparse
 import re
+import sys
 from pathlib import Path
 
 
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from app.extraction import extract_claims
+
+
 ANNOTATIONS = Path(__file__).resolve().parents[1] / "data" / "annotations-rgph.md"
-OPINION_START = re.compile(r"^(?:à mon avis|selon moi|je pense|je trouve)\b", re.IGNORECASE)
-
-
-def extract_claims(text):
-    """Retourne les phrases candidates telles qu’elles figurent dans le texte."""
-    sentences = re.split(r"(?<=[.!?…])\s+|\n\s*\n", text.strip())
-    return [
-        sentence
-        for sentence in sentences
-        if re.search(r"\d", sentence)
-        and not sentence.endswith("?")
-        and not OPINION_START.match(sentence)
-    ]
 
 
 def evaluate_development():

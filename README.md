@@ -46,7 +46,46 @@ Le premier parcours part d’un texte collé et s’appuie sur un corpus autoris
 
 ## État du projet
 
-La référence BM25 et la comparaison avec E5 ont été mesurées sur 16 passages et 9 cas de développement. E5 est retenu pour la recherche du prototype. Un premier extracteur a retrouvé 5 des 6 affirmations attendues dans les trois textes de développement. mDeBERTa a classé correctement 8 des 13 paires testées. Les règles d’attribution des statuts sont implémentées et vérifiées par huit tests. La prochaine étape consiste à appliquer ces règles lors de l’analyse d’un texte complet. Les 7 cas de test final restent réservés.
+Le parcours d’analyse est disponible en ligne de commande et dans FastAPI. La requête de démonstration a renvoyé les trois statuts attendus avec E5 en local. La prochaine étape consiste à relier le formulaire Streamlit à l’API. Les 7 cas de test final restent réservés.
+
+## Structure du projet
+
+| Chemin | Contenu |
+| --- | --- |
+| `app/` | API FastAPI, analyse des textes, extraction, recherche E5 et règles de statut. |
+| `data/` | Corpus HCP, annotations, répartition des exemples et texte de démonstration. |
+| `experiments/` | Commandes et résultats des essais BM25, E5, extraction, mDeBERTa et démonstration en ligne de commande. |
+| `tests/` | Tests de l’API, du parcours d’analyse et des règles de statut. |
+| `requirements.txt` et `requirements-dev.txt` | Versions des dépendances du backend et du client de test. |
+
+## API FastAPI en local
+
+Depuis la racine du projet, créer l’environnement Python 3.12 si nécessaire, installer les dépendances et démarrer le serveur.
+
+```powershell
+uv venv --python 3.12 .venv
+uv pip install --python .venv/Scripts/python.exe -r requirements.txt
+& .venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+Au démarrage, le serveur charge E5 depuis le cache Hugging Face et encode les passages du corpus. Le premier lancement télécharge les poids publics si nécessaire. La documentation interactive se trouve à l’adresse [`/docs`](http://127.0.0.1:8000/docs) et le contrat OpenAPI à [`/openapi.json`](http://127.0.0.1:8000/openapi.json).
+
+`POST /analyses` accepte un objet JSON avec un champ `texte` contenant de 1 à 12 000 caractères et au moins un caractère non blanc. Exemple de requête avec le texte de démonstration.
+
+```powershell
+$texte = [IO.File]::ReadAllText((Resolve-Path data/demo-rgph.txt).Path, [Text.Encoding]::UTF8)
+$payload = @{ texte = $texte } | ConvertTo-Json
+$reply = Invoke-WebRequest -UseBasicParsing -Method Post -Uri http://127.0.0.1:8000/analyses -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($payload))
+[Text.Encoding]::UTF8.GetString($reply.RawContentStream.ToArray()) | ConvertFrom-Json
+```
+
+| Code HTTP | Réponse |
+| --- | --- |
+| `200` | Objet `affirmations` contenant une liste. Chaque entrée contient `affirmation`, `statut`, `explication`, `preuves` et `passages_consultes`. La liste est vide si l’extracteur ne relève aucune affirmation. |
+| `422` | Erreur de validation FastAPI si la saisie est manquante, du mauvais type, vide ou trop longue. |
+| `500` | Objet `{"detail": "L’analyse a échoué."}` en cas d’erreur pendant le traitement. |
+
+Pour exécuter les tests, installer `requirements-dev.txt` dans le même environnement, puis lancer `& .venv/Scripts/python.exe -m unittest discover -s tests -v`. Les 17 tests passent. La requête de démonstration et Swagger ont aussi été vérifiés sur un serveur Uvicorn local avec les poids E5 en cache.
 
 ## Feuille de route à cocher
 
@@ -77,11 +116,11 @@ Cocher une tâche après avoir vérifié le résultat décrit sur sa ligne.
 - [x] Comparer la recherche sémantique proposée avec E5 à BM25 sur les mêmes passages et requêtes de développement. Justifier le choix selon les preuves retrouvées et le temps de réponse. [Comparaison E5 et BM25](#comparaison-e5-et-bm25)
 - [x] Tester la comparaison entre une affirmation et un passage, par exemple avec mDeBERTa. Examiner les erreurs sur les dates, les quantités et les négations. [Résultats mDeBERTa](#évaluation-des-passages-avec-mdeberta)
 - [x] Définir comment attribuer les quatre statuts, y compris lorsqu’une vérification reste à faire, que les sources divergent ou que les passages couvrent seulement une partie de l’affirmation. [Règles d’attribution des statuts](#règles-dattribution-des-statuts)
-- [ ] Faire passer un article complet dans le traitement et contrôler chaque statut, extrait, lien et explication. Consigner les modèles retenus et leurs limites.
+- [x] Faire passer un texte complet dans le traitement et contrôler chaque statut, extrait, lien et explication. Consigner les modèles retenus et leurs limites. [Démonstration de bout en bout](#démonstration-de-bout-en-bout)
 
 ### 5. Relier FastAPI et Streamlit
 
-- [ ] Exposer l’analyse dans FastAPI, documenter les entrées et les réponses et tester un texte valide, une saisie vide et une erreur de traitement.
+- [x] Exposer l’analyse dans FastAPI, documenter les entrées et les réponses et tester un texte valide, une saisie vide et une erreur de traitement. [API FastAPI en local](#api-fastapi-en-local)
 - [ ] Relier le formulaire Streamlit à l’API et afficher les affirmations, statuts, incertitudes, extraits et références.
 - [ ] Vérifier depuis l’interface qu’un utilisateur peut coller un article, ouvrir un passage cité et comprendre le résultat lorsqu’aucune preuve suffisante n’est trouvée.
 
@@ -172,7 +211,7 @@ uv pip install --python .venv/Scripts/python.exe numpy==2.2.6 onnxruntime==1.22.
 
 Les deux méthodes classent les 16 passages pour les mêmes neuf requêtes de développement. Pour E5, les passages sont encodés une fois, puis classés par similarité cosinus avec chaque requête encodée. Le script mesure la médiane de 21 recherches par requête et méthode sur CPU, après chargement du modèle et préparation de l’index. La mesure inclut le traitement de la requête et le classement. [Script de comparaison](experiments/comparer_e5_bm25.py)
 
-+| Cas | Méthode | Top 3 | Rangs des preuves | Temps médian (ms) |
+| Cas | Méthode | Top 3 | Rangs des preuves | Temps médian (ms) |
 | --- | --- | --- | --- | ---: |
 | A01 | BM25 | P01, P15, P07 | P01 (1) | 0.157 |
 | A01 | E5 | P01, P15, P03 | P01 (1) | 19.541 |
@@ -203,7 +242,7 @@ Depuis la racine du projet, lancer `& .venv/Scripts/python.exe experiments/evalu
 
 Le modèle reçoit les passages en premier et l’affirmation en second. Il prédit une relation d’appui, de contradiction ou de neutralité. L’essai utilise des passages sélectionnés à partir des cas de développement et des variantes contrôlées pour les dates, les quantités et les négations. Pour A05 et A09, le territoire ou la période sont explicités dans la phrase. Le lot de test final reste réservé.
 
-+| Cas | Passages | Attendu | Prédit | Score de la classe prédite |
+| Cas | Passages | Attendu | Prédit | Score de la classe prédite |
 | --- | --- | --- | --- | ---: |
 | A01 | P01 | appui | appui | 0.982 |
 | A02 | P04 | contradiction | neutre | 0.742 |
@@ -236,4 +275,18 @@ Pour chaque affirmation, il faut vérifier la concordance du territoire, de la p
 
 La divergence entre preuves suffisantes prime sur les deux décisions conclusives. Dans ce cas, l’explication signale explicitement le désaccord. Par exemple, le chiffre de 2024 dans P01 laisse le cas A03 sur 2023 insuffisamment documenté. Pour A09, les passages P09 et P10 doivent être lus ensemble pour vérifier la comparaison entre les taux rural et urbain.
 
-Le module Python applique ces règles à des évaluations de preuve déjà renseignées. La validation du périmètre et des valeurs intervient en amont. Un score de mDeBERTa est un signal à examiner avant de renseigner ces évaluations. Les huit tests couvrent les quatre statuts, les preuves partielles, les passages hors période et les sources qui divergent. La commande est `& .venv/Scripts/python.exe -m unittest discover -s tests -v`. [Module de décision](experiments/verdict_rgph.py) · [Tests](tests/test_verdict_rgph.py)
+Le module Python applique ces règles à des évaluations de preuve déjà renseignées. La validation du périmètre et des valeurs intervient en amont. Un score de mDeBERTa est un signal à examiner avant de renseigner ces évaluations. Les huit tests couvrent les quatre statuts, les preuves partielles, les passages hors période et les sources qui divergent. La commande est `& .venv/Scripts/python.exe -m unittest discover -s tests -v`. [Module de décision](app/verdict.py) · [Tests](tests/test_verdict_rgph.py)
+
+### Démonstration de bout en bout
+
+Depuis la racine du projet, utiliser l’environnement de l’essai E5 et lancer `& .venv/Scripts/python.exe -m experiments.analyser_rgph data/demo-rgph.txt`. La commande accepte aussi un autre fichier texte UTF-8. Elle renvoie en JSON les phrases d’origine, les statuts, les explications et les passages du corpus avec les liens HCP. Les passages qui justifient un statut figurent dans `preuves`. [Analyse du texte](experiments/analyser_rgph.py) · [Texte de démonstration](data/demo-rgph.txt)
+
+| Affirmation de la démo | Statut obtenu | Explication et preuve |
+| --- | --- | --- |
+| Le Maroc comptait 36 828 330 habitants au 1er septembre 2024. | Appuyée par les sources | P01 donne le même total à la même date. |
+| Le Maroc comptait 10 000 000 ménages en 2024. | Contredite | P15 donne 9 275 038 ménages pour le même territoire et la même année. |
+| Le Maroc comptait 36 828 330 habitants au 1er septembre 2023. | Insuffisamment documentée | Le passage le plus proche concerne 2024. |
+
+L’avis ajouté au texte est écarté par l’extracteur. E5 fournit les trois passages les mieux classés. Les règles comparent des valeurs exactes pour les formulations reconnues sur la population nationale datée, le nombre national de ménages et le taux national d’urbanisation. Les reformulations complexes, comparaisons et indicateurs hors de ces formats exigent un traitement supplémentaire. Les scores mDeBERTa restent des résultats expérimentaux, car l’essai a montré des erreurs sur les quantités.
+
+Les tests de l’analyse vérifient notamment la conservation du texte d’origine, le renvoi aux sources et la détection d’un écart d’un habitant. La commande de démonstration a également été vérifiée avec le modèle E5 local. [Tests de l’analyse](tests/test_analyser_rgph.py)

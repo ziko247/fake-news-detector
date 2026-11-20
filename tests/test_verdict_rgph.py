@@ -1,6 +1,6 @@
 import unittest
 
-from experiments.verdict_rgph import EvidenceAssessment, Relation, Status, decide_status
+from app.verdict import EvidenceAssessment, Relation, Status, decide_status
 
 
 class VerdictTests(unittest.TestCase):
