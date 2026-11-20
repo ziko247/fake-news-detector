@@ -20,6 +20,7 @@ dist/
 # Notebooks et Streamlit
 .ipynb_checkpoints/
 .streamlit/secrets.toml
+data/*.sqlite3*
 
 # Fichiers système
 Thumbs.db

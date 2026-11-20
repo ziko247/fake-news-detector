@@ -1,0 +1,29 @@
+/* Hallmark · app: registre RGPH · theme: Almanac · genre: editorial · v2.0.0 */
+/* Critique: le filet sépare la saisie du dossier de preuves. */
+:root {
+  --rule: #435568;
+  --focus: #962253;
+  --reading-face: Georgia, Cambria, serif;
+}
+html, body { overflow-x: clip; }
+h1, h2, h3 { overflow-wrap: break-word; min-width: 0; text-wrap: balance; }
+[data-testid="stMainBlockContainer"] { max-width: 54rem; }
+[data-testid="stHeadingWithActionElements"]:has(h1) {
+  border-top: 3px solid var(--rule);
+  padding-top: 1rem;
+}
+[data-testid="stText"] { font-family: var(--reading-face); line-height: 1.55; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+[data-testid="stMain"] :is(button, a, textarea):focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+[data-testid="stCaptionContainer"] p { color: var(--rule); }
+[data-testid="stForm"] {
+  background: var(--st-secondary-background-color);
+  padding: clamp(1rem, 3vw, 2rem);
+}
+[data-testid="stMain"] h1 { font-family: var(--reading-face); font-weight: 600; }
+@media (max-width: 40rem) {
+  [data-testid="stFormSubmitButton"] button { width: 100%; min-height: 44px; }
+}

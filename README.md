@@ -46,17 +46,18 @@ Le premier parcours part d’un texte collé et s’appuie sur un corpus autoris
 
 ## État du projet
 
-Le parcours d’analyse est disponible en ligne de commande et dans FastAPI. La requête de démonstration a renvoyé les trois statuts attendus avec E5 en local. La prochaine étape consiste à relier le formulaire Streamlit à l’API. Les 7 cas de test final restent réservés.
+Le parcours d’analyse est disponible en ligne de commande, dans FastAPI et depuis le formulaire Streamlit. Le texte de démonstration a produit les trois statuts attendus dans le navigateur avec E5 en local. FastAPI enregistre désormais les analyses dans SQLite. La prochaine étape est l’authentification pour un historique privé. Les 7 cas de test final restent réservés.
 
 ## Structure du projet
 
 | Chemin | Contenu |
 | --- | --- |
 | `app/` | API FastAPI, analyse des textes, extraction, recherche E5 et règles de statut. |
+| `frontend/` et `.streamlit/` | Formulaire Streamlit, présentation des preuves et thème de lecture. |
 | `data/` | Corpus HCP, annotations, répartition des exemples et texte de démonstration. |
 | `experiments/` | Commandes et résultats des essais BM25, E5, extraction, mDeBERTa et démonstration en ligne de commande. |
 | `tests/` | Tests de l’API, du parcours d’analyse et des règles de statut. |
-| `requirements.txt` et `requirements-dev.txt` | Versions des dépendances du backend et du client de test. |
+| `requirements.txt` et `requirements-dev.txt` | Dépendances de FastAPI et Streamlit, complétées par le client HTTP pour les tests. |
 
 ## API FastAPI en local
 
@@ -85,7 +86,19 @@ $reply = Invoke-WebRequest -UseBasicParsing -Method Post -Uri http://127.0.0.1:8
 | `422` | Erreur de validation FastAPI si la saisie est manquante, du mauvais type, vide ou trop longue. |
 | `500` | Objet `{"detail": "L’analyse a échoué."}` en cas d’erreur pendant le traitement. |
 
-Pour exécuter les tests, installer `requirements-dev.txt` dans le même environnement, puis lancer `& .venv/Scripts/python.exe -m unittest discover -s tests -v`. Les 17 tests passent. La requête de démonstration et Swagger ont aussi été vérifiés sur un serveur Uvicorn local avec les poids E5 en cache.
+Pour exécuter les tests, installer `requirements-dev.txt` dans le même environnement, puis lancer `& .venv/Scripts/python.exe -m unittest discover -s tests -v`.
+
+## Interface Streamlit en local
+
+Laisser FastAPI tourner dans le premier terminal. Depuis la racine du projet, ouvrir un second terminal PowerShell et lancer le formulaire.
+
+```powershell
+& .venv/Scripts/python.exe -m streamlit run frontend/streamlit_app.py --server.address 127.0.0.1
+```
+
+Ouvrir [le formulaire local](http://127.0.0.1:8501), coller le contenu de [l’article de démonstration](data/demo-rgph.txt), puis choisir **Analyser le texte**. L’interface appelle `POST /analyses`. La variable d’environnement `API_BASE_URL` permet de remplacer l’adresse par défaut `http://127.0.0.1:8000`.
+
+La population de 2024 est appuyée par P01 et le nombre de ménages est contredit par P15. Pour la population de 2023, l’interface explique pourquoi la période empêche de conclure. Chaque preuve donne accès à la publication du HCP. Les autres passages restent consultables dans un volet séparé.
 
 ## Feuille de route à cocher
 
@@ -121,12 +134,14 @@ Cocher une tâche après avoir vérifié le résultat décrit sur sa ligne.
 ### 5. Relier FastAPI et Streamlit
 
 - [x] Exposer l’analyse dans FastAPI, documenter les entrées et les réponses et tester un texte valide, une saisie vide et une erreur de traitement. [API FastAPI en local](#api-fastapi-en-local)
-- [ ] Relier le formulaire Streamlit à l’API et afficher les affirmations, statuts, incertitudes, extraits et références.
-- [ ] Vérifier depuis l’interface qu’un utilisateur peut coller un article, ouvrir un passage cité et comprendre le résultat lorsqu’aucune preuve suffisante n’est trouvée.
+- [x] Relier le formulaire Streamlit à l’API et afficher les affirmations, statuts, incertitudes, extraits et références.
+- [x] Vérifier depuis l’interface qu’un utilisateur peut coller un article, ouvrir un passage cité et comprendre le résultat lorsqu’aucune preuve suffisante n’est trouvée. Parcours vérifié dans Edge avec la démonstration et la source P01.
 
 ### 6. Enregistrer et sécuriser les analyses
 
-- [ ] Choisir la base de données et vérifier la persistance des utilisateurs, analyses, affirmations, preuves et retours de validation après redémarrage.
+- [x] Choisir la base de données et vérifier la persistance des utilisateurs, analyses, affirmations, preuves et retours de validation après redémarrage. Deux processus FastAPI successifs ont permis de retrouver les trois affirmations de la démonstration, les preuves P01 et P15 et un commentaire de test dans la même base.
+
+SQLite convient à la démonstration locale et se lance avec Python. Chaque analyse réussie via `POST /analyses` enregistre le texte, la date et les affirmations avec leurs preuves et passages consultés dans une seule transaction. Le fichier `data/history.sqlite3` est exclu de Git. La variable `RGPH_DB_PATH` permet de choisir un autre emplacement. Chaque soumission crée une entrée, même si le texte a déjà été analysé. Le profil partagé `local` sert à la démonstration sur un poste individuel. Les comptes, la consultation privée et la saisie des retours depuis l’interface figurent dans les étapes suivantes.
 - [ ] Mettre en place l’authentification et charger les secrets depuis l’environnement. Vérifier qu’une requête anonyme vers un historique privé est refusée.
 - [ ] Permettre à l’utilisateur de rouvrir une analyse et d’enregistrer son retour sur une affirmation.
 - [ ] Tester avec deux comptes que chacun peut consulter et commenter ses analyses et que l’API bloque l’accès aux analyses de l’autre.

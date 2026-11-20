@@ -1,57 +1,24 @@
 """API HTTP du prototype RGPH."""
 
 import logging
+import os
+from pathlib import Path
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
-from pydantic import BaseModel, Field, field_validator
+from .schemas import AnalysisRequest, AnalysisResponse, ErrorResponse
 
 from .analysis import build_article_analyzer
-from .verdict import Relation, Status
+from .storage import initialize, save_analysis
 
 logger = logging.getLogger(__name__)
 
 
-class AnalysisRequest(BaseModel):
-    texte: str = Field(strict=True, min_length=1, max_length=12_000, description="Texte à analyser.")
-
-    @field_validator("texte")
-    @classmethod
-    def reject_blank_text(cls, text: str) -> str:
-        if not text.strip():
-            raise ValueError("Le texte est vide.")
-        return text
-
-
-class PassageResponse(BaseModel):
-    id: str
-    extrait: str
-    url: str
-
-
-class EvidenceResponse(PassageResponse):
-    relation: Relation
-
-
-class ClaimResponse(BaseModel):
-    affirmation: str
-    statut: Status
-    explication: str
-    preuves: list[EvidenceResponse]
-    passages_consultes: list[PassageResponse]
-
-
-class AnalysisResponse(BaseModel):
-    affirmations: list[ClaimResponse]
-
-
-class ErrorResponse(BaseModel):
-    detail: str
-
-
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    yield {"analyze": build_article_analyzer()}
+    path = Path(os.environ.get("RGPH_DB_PATH", Path(__file__).resolve().parents[1] / "data" / "history.sqlite3"))
+    initialize(path)
+    yield {"analyze": build_article_analyzer(), "db_path": path}
 
 
 app = FastAPI(
@@ -69,8 +36,9 @@ app = FastAPI(
 )
 def create_analysis(payload: AnalysisRequest, request: Request):
     try:
-        results = request.state.analyze(payload.texte)
+        response = AnalysisResponse(affirmations=request.state.analyze(payload.texte))
+        save_analysis(request.state.db_path, payload.texte, response)
     except Exception as error:
         logger.error("Échec de l’analyse RGPH (%s).", type(error).__name__)
         raise HTTPException(status_code=500, detail="L’analyse a échoué.") from error
-    return {"affirmations": results}
+    return response
