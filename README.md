@@ -46,7 +46,7 @@ Le premier parcours part d’un texte collé et s’appuie sur un corpus autoris
 
 ## État du projet
 
-La référence BM25 est mesurée sur 16 passages et 9 cas de développement. Les 7 cas de test final restent réservés. La prochaine étape consiste à extraire les affirmations vérifiables d’un texte.
+La référence BM25 et la comparaison avec E5 ont été mesurées sur 16 passages et 9 cas de développement. E5 est retenu pour la recherche du prototype. Un premier extracteur a retrouvé 5 des 6 affirmations attendues dans les trois textes de développement. mDeBERTa a classé correctement 8 des 13 paires testées. Les règles d’attribution des statuts sont implémentées et vérifiées par huit tests. La prochaine étape consiste à appliquer ces règles lors de l’analyse d’un texte complet. Les 7 cas de test final restent réservés.
 
 ## Feuille de route à cocher
 
@@ -73,10 +73,10 @@ Cocher une tâche après avoir vérifié le résultat décrit sur sa ligne.
 
 ### 4. Construire et choisir le composant intelligent
 
-- [ ] Extraire les affirmations vérifiables d’un article en conservant leur phrase d’origine. Vérifier les omissions, les opinions et les affirmations ajoutées à tort.
-- [ ] Comparer la recherche sémantique proposée avec E5 à BM25 sur les mêmes passages et requêtes de développement. Justifier le choix selon les preuves retrouvées et le temps de réponse.
-- [ ] Tester la comparaison entre une affirmation et un passage, par exemple avec mDeBERTa. Examiner les erreurs sur les dates, les quantités et les négations.
-- [ ] Définir comment attribuer les quatre statuts, y compris lorsqu’une vérification reste à faire, que les sources divergent ou que les passages couvrent seulement une partie de l’affirmation.
+- [x] Construire une première référence pour l’extraction d’affirmations en conservant leur phrase d’origine. Vérifier les omissions, les opinions et les phrases sélectionnées à tort. [Résultats de l’extraction](#premier-essai-dextraction)
+- [x] Comparer la recherche sémantique proposée avec E5 à BM25 sur les mêmes passages et requêtes de développement. Justifier le choix selon les preuves retrouvées et le temps de réponse. [Comparaison E5 et BM25](#comparaison-e5-et-bm25)
+- [x] Tester la comparaison entre une affirmation et un passage, par exemple avec mDeBERTa. Examiner les erreurs sur les dates, les quantités et les négations. [Résultats mDeBERTa](#évaluation-des-passages-avec-mdeberta)
+- [x] Définir comment attribuer les quatre statuts, y compris lorsqu’une vérification reste à faire, que les sources divergent ou que les passages couvrent seulement une partie de l’affirmation. [Règles d’attribution des statuts](#règles-dattribution-des-statuts)
 - [ ] Faire passer un article complet dans le traitement et contrôler chaque statut, extrait, lien et explication. Consigner les modèles retenus et leurs limites.
 
 ### 5. Relier FastAPI et Streamlit
@@ -144,3 +144,96 @@ Exécuter `python experiments/bm25_rgph.py --development` depuis la racine du pr
 Tous les passages attendus figurent dans les trois premiers résultats pour **5 des 6 cas documentés**. A05 illustre une confusion d’année. Le premier résultat reprend la valeur citée, mais concerne 2004 alors que l’affirmation parle de 2014. A09 demande deux preuves et dépend du contexte de la phrase précédente pour préciser la période. Les trois cas sans preuve annotée sont examinés séparément, car BM25 leur renvoie aussi des passages.
 
 Chaque temps est la médiane de 101 recherches sur cet ordinateur sous Python 3.12. La mesure inclut la tokenisation de la requête, le calcul des scores et le tri. Elle commence après la préparation de l’index et se termine avant l’affichage des résultats.
+
+### Premier essai d’extraction
+
+Exécuter `python experiments/extraire_rgph.py` pour évaluer les trois textes du lot de développement. Pour analyser un fichier texte UTF-8, utiliser `python experiments/extraire_rgph.py chemin/vers/article.txt`. [Script d’extraction](experiments/extraire_rgph.py)
+
+Cette référence découpe le texte en phrases et conserve celles qui contiennent un chiffre, après avoir filtré les questions terminées par « ? » et quelques débuts de phrase exprimant une opinion. Chaque résultat reprend la formulation d’origine.
+
+| Texte | Affirmations attendues | Extraits exacts retrouvés | Phrases retenues à tort |
+| --- | ---: | ---: | ---: |
+| T01 | 2 | 2 | 0 |
+| T03 | 2 | 1 | 0 |
+| T06 | 2 | 2 | 0 |
+| Total | 6 | 5 | 0 |
+
+La précision est de 5/5 et le rappel de 5/6 sur ces trois textes. L’opinion de T01 est écartée. A09 est omise parce que sa comparaison ne contient aucun chiffre et renvoie à la période citée dans la phrase précédente. Ce premier essai couvre les affirmations chiffrées et sert de référence pour évaluer une extraction capable de traiter les comparaisons implicites.
+
+### Comparaison E5 et BM25
+
+Depuis la racine du projet, créer un environnement Python 3.12 et lancer l’expérience. Le premier lancement télécharge le tokenizer et les poids ONNX quantifiés en 8 bits de `intfloat/multilingual-e5-small`. [Fiche E5](https://huggingface.co/intfloat/multilingual-e5-small) · [Fichiers de la révision utilisée](https://huggingface.co/intfloat/multilingual-e5-small/tree/ccc66d3bcd826f577e26b9a4072cc5fe3a7ad6a3/onnx)
+
+```powershell
+uv venv --python 3.12 .venv
+uv pip install --python .venv/Scripts/python.exe numpy==2.2.6 onnxruntime==1.22.1 tokenizers==0.21.4 huggingface-hub==0.34.4
+& .venv/Scripts/python.exe experiments/comparer_e5_bm25.py
+```
+
+Les deux méthodes classent les 16 passages pour les mêmes neuf requêtes de développement. Pour E5, les passages sont encodés une fois, puis classés par similarité cosinus avec chaque requête encodée. Le script mesure la médiane de 21 recherches par requête et méthode sur CPU, après chargement du modèle et préparation de l’index. La mesure inclut le traitement de la requête et le classement. [Script de comparaison](experiments/comparer_e5_bm25.py)
+
++| Cas | Méthode | Top 3 | Rangs des preuves | Temps médian (ms) |
+| --- | --- | --- | --- | ---: |
+| A01 | BM25 | P01, P15, P07 | P01 (1) | 0.157 |
+| A01 | E5 | P01, P15, P03 | P01 (1) | 19.541 |
+| A02 | BM25 | P04, P09, P10 | P04 (1) | 0.276 |
+| A02 | E5 | P04, P09, P10 | P04 (1) | 23.780 |
+| A03 | BM25 | P01, P07, P08 | — | 0.122 |
+| A03 | E5 | P01, P05, P03 | — | 18.038 |
+| A04 | BM25 | P01, P07, P08 | P01 (1) | 0.088 |
+| A04 | E5 | P01, P15, P03 | P01 (1) | 20.735 |
+| A05 | BM25 | P06, P05, P14 | P05 (2) | 0.105 |
+| A05 | E5 | P05, P06, P02 | P05 (1) | 14.492 |
+| A08 | BM25 | P16, P09, P01 | P09 (2) | 0.304 |
+| A08 | E5 | P09, P04, P16 | P09 (1) | 22.547 |
+| A09 | BM25 | P08, P16, P03 | P09 (5), P10 (6) | 0.252 |
+| A09 | E5 | P10, P09, P04 | P09 (2), P10 (1) | 18.511 |
+| A15 | BM25 | P01, P07, P08 | — | 0.195 |
+| A15 | E5 | P01, P05, P03 | — | 18.531 |
+| A16 | BM25 | P14, P16, P03 | — | 0.115 |
+| A16 | E5 | P14, P15, P16 | — | 17.859 |
+
+E5 retrouve tous les passages annotés dans les trois premiers résultats pour **6 cas sur 6**, contre **5 sur 6** pour BM25. Pour A09, les deux preuves passent des rangs 5 et 6 aux rangs 2 et 1. Les trois cas sans preuve annotée sont exclus de ce calcul. Les deux méthodes proposent aussi des passages pour ces cas, dont il faudra évaluer le contenu avant d’attribuer un statut.
+
+La médiane des temps par requête est de **18,531 ms pour E5** et **0,157 ms pour BM25** sur cet ordinateur. On retient E5 pour le prototype parce qu’il couvre les deux preuves d’A09 dans les trois premiers résultats, avec un temps médian inférieur à 24 ms pour chacune des neuf requêtes. BM25 reste la référence de comparaison. Ce choix repose sur neuf cas de développement, dont deux reprises d’affirmations, et sera réévalué sur le lot de test réservé.
+
+### Évaluation des passages avec mDeBERTa
+
+Depuis la racine du projet, lancer `& .venv/Scripts/python.exe experiments/evaluer_mdeberta.py` avec l’environnement ONNX de l’essai E5. Le premier lancement récupère les poids quantifiés, le tokenizer et la configuration de classes. [Fiche de mDeBERTa](https://huggingface.co/MoritzLaurer/mDeBERTa-v3-base-mnli-xnli) · [Révision utilisée](https://huggingface.co/MoritzLaurer/mDeBERTa-v3-base-mnli-xnli/tree/704310ca0bb8eb15bca150fc1e11083cd423dd02)
+
+Le modèle reçoit les passages en premier et l’affirmation en second. Il prédit une relation d’appui, de contradiction ou de neutralité. L’essai utilise des passages sélectionnés à partir des cas de développement et des variantes contrôlées pour les dates, les quantités et les négations. Pour A05 et A09, le territoire ou la période sont explicités dans la phrase. Le lot de test final reste réservé.
+
++| Cas | Passages | Attendu | Prédit | Score de la classe prédite |
+| --- | --- | --- | --- | ---: |
+| A01 | P01 | appui | appui | 0.982 |
+| A02 | P04 | contradiction | neutre | 0.742 |
+| A03 | P01 | neutre | neutre | 0.847 |
+| A04 | P01 | appui | appui | 0.920 |
+| A05, année correspondante | P05 | contradiction | neutre | 0.648 |
+| A05, autre année | P06 | neutre | neutre | 0.624 |
+| A08 | P09 | appui | appui | 0.861 |
+| A09, deux passages | P09, P10 | contradiction | neutre | 0.758 |
+| A09, un seul passage | P09 | neutre | neutre | 0.885 |
+| Quantité modifiée | P01 | contradiction | appui | 0.861 |
+| Négation du total | P01 | contradiction | contradiction | 0.679 |
+| Négation d'une baisse | P09 | appui | neutre | 0.745 |
+| A16 | P14 | neutre | neutre | 0.990 |
+
+L’essai donne **8 relations correctes sur 13**. Le modèle reconnaît 3 des 4 appuis, 1 des 5 contradictions et les 4 cas neutres. Les passages d’une autre année sont classés neutres dans A03 et A05. Le chiffre de 2014 dans A05 contredit pourtant l’affirmation, que le modèle classe aussi neutre. Les deux taux de A09 suffisent à réfuter la comparaison annotée, que le modèle classe neutre même avec les deux passages.
+
+La quantité modifiée de 36 828 330 à 36 828 331 est prédite comme un appui avec un score de 0,861. Le modèle détecte la négation directe du total et rate l’appui à la phrase « n’a pas diminué ». Ce petit essai mesure le classement de paires construites à la main. Les scores indiquent la préférence du modèle parmi trois classes. Pour l’attribution des statuts, ces résultats motivent une vérification explicite de la période, des quantités et de la couverture des preuves.
+
+### Règles d’attribution des statuts
+
+Pour chaque affirmation, il faut vérifier la concordance du territoire, de la population concernée, de la période et de l’indicateur. Quand des chiffres interviennent, il faut aussi comparer leurs valeurs, unités et niveaux de précision. Des passages compatibles peuvent être examinés ensemble. Pour appuyer une affirmation, les preuves doivent couvrir tous ses éléments nécessaires. Pour la contredire, une preuve qui réfute un élément nécessaire peut suffire.
+
+| Situation | Statut |
+| --- | --- |
+| La vérification reste à faire ou a été interrompue. | Non vérifiée |
+| Des preuves suffisantes et de même périmètre appuient l’affirmation. | Appuyée par les sources |
+| Des preuves suffisantes et de même périmètre la réfutent. | Contredite |
+| La vérification est terminée et les preuves manquent, sont partielles, hors périmètre, neutres ou divergent de façon décisive. | Insuffisamment documentée |
+
+La divergence entre preuves suffisantes prime sur les deux décisions conclusives. Dans ce cas, l’explication signale explicitement le désaccord. Par exemple, le chiffre de 2024 dans P01 laisse le cas A03 sur 2023 insuffisamment documenté. Pour A09, les passages P09 et P10 doivent être lus ensemble pour vérifier la comparaison entre les taux rural et urbain.
+
+Le module Python applique ces règles à des évaluations de preuve déjà renseignées. La validation du périmètre et des valeurs intervient en amont. Un score de mDeBERTa est un signal à examiner avant de renseigner ces évaluations. Les huit tests couvrent les quatre statuts, les preuves partielles, les passages hors période et les sources qui divergent. La commande est `& .venv/Scripts/python.exe -m unittest discover -s tests -v`. [Module de décision](experiments/verdict_rgph.py) · [Tests](tests/test_verdict_rgph.py)

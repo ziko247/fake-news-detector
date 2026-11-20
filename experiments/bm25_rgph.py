@@ -52,6 +52,14 @@ def rank_passages(claim, frequencies, lengths, average_length, document_frequenc
     return sorted(scores.items(), key=lambda result: (-result[1], result[0]))
 
 
+def build_index(passages):
+    frequencies = {pid: Counter(tokenize(text)) for pid, text in passages}
+    lengths = {pid: sum(terms.values()) for pid, terms in frequencies.items()}
+    average_length = sum(lengths.values()) / len(passages)
+    document_frequency = Counter(term for terms in frequencies.values() for term in terms)
+    return frequencies, lengths, average_length, document_frequency
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--development", action="store_true", help="Évalue le corpus élargi sur le lot de développement.")
@@ -71,13 +79,9 @@ def main():
     if not passages or not claims:
         raise ValueError("Le corpus doit contenir des passages et des affirmations.")
 
-    frequencies = {pid: Counter(tokenize(text)) for pid, text in passages}
-    lengths = {pid: sum(terms.values()) for pid, terms in frequencies.items()}
-    average_length = sum(lengths.values()) / len(passages)
-    document_frequency = Counter(term for terms in frequencies.values() for term in terms)
-
+    index = build_index(passages)
     for claim_id, (claim, evidence) in claims.items():
-        ranking = rank_passages(claim, frequencies, lengths, average_length, document_frequency)
+        ranking = rank_passages(claim, *index)
 
         print(claim_id)
         for rank, (pid, score) in enumerate(ranking, start=1):
@@ -86,7 +90,7 @@ def main():
             ranks = {pid: rank for rank, (pid, _) in enumerate(ranking, start=1)}
             evidence_ranks = ", ".join(f"{pid} au rang {ranks[pid]}" for pid in evidence)
             durations = repeat(
-                lambda: rank_passages(claim, frequencies, lengths, average_length, document_frequency),
+                lambda: rank_passages(claim, *index),
                 repeat=TIMING_REPEATS,
                 number=1,
             )
