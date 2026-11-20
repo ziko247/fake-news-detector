@@ -1,0 +1,26 @@
+# Environnements Python et secrets locaux
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+
+# caches et builds Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Notebooks et Streamlit
+.ipynb_checkpoints/
+.streamlit/secrets.toml
+
+# Fichiers système
+Thumbs.db
+.DS_Store
