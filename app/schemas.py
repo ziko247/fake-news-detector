@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import AnyHttpUrl, BaseModel, Field, field_validator
 
 from .verdict import Relation, Status
 
@@ -38,3 +38,15 @@ class AnalysisResponse(BaseModel):
 
 class ErrorResponse(BaseModel):
     detail: str
+
+
+class NewsArticle(BaseModel):
+    title: str = Field(min_length=1)
+    description: str | None = None
+    source: str | None = None
+    published_at: str | None = None
+    url: AnyHttpUrl
+
+
+class NewsResponse(BaseModel):
+    articles: list[NewsArticle]

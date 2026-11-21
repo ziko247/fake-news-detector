@@ -3,7 +3,8 @@ import json
 import tempfile
 from pathlib import Path
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
+from urllib.parse import parse_qs, urlsplit
 
 from fastapi.testclient import TestClient
 
@@ -90,3 +91,47 @@ class AnalysisApiTests(unittest.TestCase):
         self.assertEqual(set(endpoint["responses"]), {"200", "422", "500"})
         text_schema = schema["components"]["schemas"]["AnalysisRequest"]["properties"]["texte"]
         self.assertEqual(text_schema["maxLength"], 12_000)
+
+    def test_news_uses_apilayer_french_feed_and_validates_links(self):
+        with patch.dict(os.environ, MEDIASTACK_API_KEY="test-key"), patch(
+            "app.mediastack.HTTPSConnection"
+        ) as transport:
+            upstream = MagicMock(status=200)
+            upstream.read.return_value = json.dumps({"data": [
+                {"title": "Un article", "url": "https://example.com/article"},
+                {"title": "Lien invalide", "url": "javascript:alert(1)"},
+            ]}).encode()
+            transport.return_value.getresponse.return_value.__enter__.return_value = upstream
+            response = self.client.get("/actualites", params={"q": "économie & emploi"})
+            default_response = self.client.get("/actualites")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([a["title"] for a in response.json()["articles"]], ["Un article"])
+        transport.assert_called_with("api.apilayer.net", timeout=10)
+        target = urlsplit(transport.return_value.request.call_args_list[0].args[1])
+        self.assertEqual(target.path, "/mediastack/v1/news")
+        self.assertEqual(parse_qs(target.query), {
+            "access_key": ["test-key"], "languages": ["fr"],
+            "limit": ["8"], "keywords": ["économie & emploi"],
+        })
+        self.assertEqual(default_response.status_code, 200)
+        default_target = urlsplit(transport.return_value.request.call_args.args[1])
+        self.assertEqual(parse_qs(default_target.query)["keywords"], ["Maroc"])
+        self.assertNotIn("test-key", response.text)
+        self.analyzer.assert_not_called()
+
+    def test_news_errors_keep_provider_details_out_of_response(self):
+        with patch.dict(os.environ, MEDIASTACK_API_KEY=""):
+            self.assertEqual(self.client.get("/actualites").status_code, 503)
+        with patch.dict(os.environ, MEDIASTACK_API_KEY="test-key"), patch(
+            "app.mediastack.HTTPSConnection"
+        ) as transport:
+            upstream = transport.return_value.getresponse.return_value.__enter__.return_value
+            upstream.status = 401
+            self.assertEqual(self.client.get("/actualites").status_code, 503)
+            upstream.status = 429
+            self.assertEqual(self.client.get("/actualites").status_code, 429)
+            upstream.status = 200
+            upstream.read.return_value = b'{"error":{"message":"test-key"}}'
+            response = self.client.get("/actualites")
+        self.assertEqual(response.status_code, 502)
+        self.assertNotIn("test-key", response.text)

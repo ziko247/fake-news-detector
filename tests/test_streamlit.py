@@ -9,6 +9,18 @@ from streamlit.testing.v1 import AppTest
 
 
 class FormTests(unittest.TestCase):
+    def test_search_loads_excerpt_without_running_analysis(self):
+        page = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "frontend/streamlit_app.py")).run()
+        data = b'{"articles":[{"title":"Un titre","description":"Un extrait.","url":"https://example.com/test"}]}'
+        page.text_input[0].set_value("transport")
+        with patch("urllib.request.urlopen", return_value=io.BytesIO(data)) as send:
+            page.button[2].click().run()
+            page.button(key="news_0").click().run()
+        self.assertEqual(send.call_count, 1)
+        self.assertTrue(send.call_args.args[0].endswith("/actualites?q=transport"))
+        self.assertEqual(page.text_area[0].value, "Un titre\n\nUn extrait.")
+        self.assertFalse(page.exception)
+
     def test_demo_loads_actual_article_without_submitting(self):
         root = Path(__file__).resolve().parents[1]
         page = AppTest.from_file(str(root / "frontend/streamlit_app.py")).run()
@@ -17,6 +29,9 @@ class FormTests(unittest.TestCase):
         send.assert_not_called()
         self.assertFalse(page.exception)
         self.assertEqual(page.text_area[0].value, (root / "data/demo-rgph.txt").read_text(encoding="utf-8"))
+        page.selectbox[0].select("Chômage et inflation").run()
+        page.button[0].click().run()
+        self.assertEqual(page.text_area[0].value, (root / "data/demo-economie.txt").read_text(encoding="utf-8"))
 
     def test_submit_then_service_failure_clears_previous_result(self):
         page = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "frontend/streamlit_app.py")).run()

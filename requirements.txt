@@ -3,6 +3,7 @@ huggingface-hub==0.34.4
 numpy==2.2.6
 onnxruntime==1.22.1
 pydantic==2.14.4
+python-dotenv==1.2.2
 streamlit==1.67.0
 tokenizers==0.21.4
 uvicorn==0.54.0

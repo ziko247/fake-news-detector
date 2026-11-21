@@ -1,4 +1,4 @@
-"""Analyse les affirmations à partir du corpus RGPH."""
+"""Analyse les affirmations à partir des publications du HCP."""
 
 import re
 from dataclasses import dataclass
@@ -16,6 +16,23 @@ DATE = r"(?P<period>1er septembre \d{4})"
 YEAR = r"(?P<period>\d{4})"
 RATE = r"(?P<value>\d+(?:[,.]\d+)?)"
 URBAN = rf"le taux d[’']urbanisation du maroc était de {RATE} % en {YEAR}\."
+
+def annual_rate(subject):
+    yield rf"{subject} était de {RATE} ?% en {YEAR}[.!]?"
+    yield rf"en {YEAR}, {subject} était de {RATE} ?%[.!]?"
+
+
+ECONOMY_PATTERNS = [
+    (indicator, pattern)
+    for indicator, subject in {
+        "chômage national": r"le taux de chômage(?: national)? au maroc",
+        "chômage urbain": "le taux de chômage en milieu urbain au maroc",
+        "chômage rural": "le taux de chômage en milieu rural au maroc",
+        "inflation annuelle": r"(?:le taux d[’']inflation annuel|l[’']inflation annuelle) au maroc",
+    }.items()
+    for pattern in annual_rate(subject)
+]
+ECONOMY_INDICATORS = {indicator for indicator, _ in ECONOMY_PATTERNS}
 
 CLAIM_PATTERNS = {
     "population": rf"au {DATE}, le maroc comptait {COUNT} habitants\.",
@@ -54,15 +71,15 @@ def read_fact(text, patterns):
     return None
 
 
-def load_passages():
-    corpus = (DATA_DIR / "corpus-rgph.md").read_text(encoding="utf-8")
+def load_passages(filename="corpus-rgph.md"):
+    corpus = (DATA_DIR / filename).read_text(encoding="utf-8")
     urls = dict(re.findall(r"^\| (S\d+) \| \[[^\]]+\]\((https://[^)]+)\)", corpus, re.MULTILINE))
     passages = {}
     for pid, text, source in re.findall(r"^\| (P\d+) \| (.+?) \| [^|]+ \| (S\d+) \|$", corpus, re.MULTILINE):
-        patterns = [PASSAGE_PATTERNS[pid]] if pid in PASSAGE_PATTERNS else []
+        patterns = [PASSAGE_PATTERNS[pid]] if pid in PASSAGE_PATTERNS else ECONOMY_PATTERNS
         passages[pid] = Passage(text, urls[source], read_fact(text, patterns))
     if not passages:
-        raise ValueError("Le corpus RGPH ne contient aucun passage.")
+        raise ValueError(f"Le corpus {filename} ne contient aucun passage.")
     return passages
 
 
@@ -70,17 +87,20 @@ def analyze_article(text, passages, rank_passages):
     results = []
     for sentence in extract_claims(text):
         claim = read_fact(sentence, CLAIM_PATTERNS.items())
+        if claim is None:
+            claim = read_fact(sentence, ECONOMY_PATTERNS)
         assessments = []
         proofs = []
         candidates = []
-        for pid, _ in rank_passages(sentence)[:3]:
+        ranked = rank_passages(sentence)
+        if claim is not None and claim.indicator in ECONOMY_INDICATORS:
+            ranked = sorted(ranked, key=lambda item: not same_scope(claim, passages[item[0]].fact))
+        for pid, _ in ranked[:3]:
             passage = passages[pid]
             candidate = {"id": pid, "extrait": passage.text, "url": passage.url}
             candidates.append(candidate)
             fact = passage.fact
-            if claim is None or fact is None:
-                continue
-            if (claim.indicator, claim.period) != (fact.indicator, fact.period):
+            if not same_scope(claim, fact):
                 continue
             relation = Relation.SUPPORTS if claim.value == fact.value else Relation.CONTRADICTS
             assessments.append(EvidenceAssessment(relation, same_scope=True, sufficient=True))
@@ -103,9 +123,15 @@ def analyze_article(text, passages, rank_passages):
 
 
 
+def same_scope(claim, fact):
+    return claim is not None and fact is not None and (
+        claim.indicator, claim.period
+    ) == (fact.indicator, fact.period)
+
+
 def build_article_analyzer():
     from .search import build_e5_ranker
 
-    passages = load_passages()
+    passages = load_passages() | load_passages("corpus-economie.md")
     rank = build_e5_ranker([(pid, passage.text) for pid, passage in passages.items()])
     return partial(analyze_article, passages=passages, rank_passages=rank)
