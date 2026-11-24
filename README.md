@@ -47,9 +47,9 @@ Pour le deuxième exemple, choisis **Chômage et inflation** dans le sélecteur,
 
 Le chômage national est couvert de 2023 à 2025 et les taux urbain et rural pour 2024. L’inflation désigne ici la variation annuelle de l’indice moyen des prix au niveau national. [Sources et chiffres du HCP](data/corpus-economie.md)
 
-## Chercher un article avec Mediastack
+## Chercher un article avec NewsData.io
 
-FastAPI lit `MEDIASTACK_API_KEY` dans le fichier `.env` à la racine du projet. Sur un autre poste, copie `.env.example` vers `.env` et renseigne ta clé. Si FastAPI tourne déjà, arrête-le avec `Ctrl+C`, puis relance-le.
+FastAPI lit `NEWSDATA_API_KEY` dans le fichier `.env` à la racine du projet. Sur un autre poste, copie `.env.example` vers `.env` et renseigne ta clé. Si FastAPI tourne déjà, arrête-le avec `Ctrl+C`, puis relance-le.
 
 ```powershell
 uv pip install --python .venv/Scripts/python.exe -r requirements.txt
@@ -57,10 +57,10 @@ uv pip install --python .venv/Scripts/python.exe -r requirements.txt
 ```
 
 1. Dans Streamlit, ouvre **Chercher des articles en français**.
-2. Entre des mots-clés comme `chômage Maroc` ou laisse le champ vide pour rechercher `Maroc`. Clique sur **Chercher des articles**.
+2. Entre un mot-clé comme `chômage` ou laisse le champ vide pour afficher les articles les plus récents. Clique sur **Chercher des articles**.
 3. Clique sur **Charger l’extrait** pour remplir le formulaire avec le titre et le résumé, ou sur **Lire l’article** pour ouvrir le texte complet. Lance ensuite **Analyser le texte**.
 
-FastAPI utilise le point d’accès du guide APILayer et renvoie jusqu’à huit articles en français. Les résultats peuvent venir de médias de différents pays. Les verdicts s’appuient sur le corpus du HCP, qui couvre le recensement, le chômage et l’inflation. [Guide APILayer pour Mediastack](https://docs.apilayer.com/apilayer/docs/quickstart-guide-5)
+FastAPI utilise les filtres Maroc et français de NewsData.io et renvoie jusqu’à huit articles. Le flux peut inclure des médias étrangers. Les verdicts s’appuient sur le corpus du HCP, qui couvre le recensement, le chômage et l’inflation. [Documentation NewsData.io](https://newsdata.io/documentation/latest-news-api)
 
 ## Comment lire les résultats
 
@@ -171,8 +171,8 @@ SQLite est inclus avec Python. Chaque analyse réussie via `POST /analyses` enre
 
 - [x] Exposer l’analyse dans FastAPI, documenter les entrées et les réponses et tester un texte valide, une saisie vide et une erreur de traitement. [API FastAPI en local](#api-fastapi-en-local)
 - [x] Relier le formulaire Streamlit à l’API et afficher les affirmations, statuts, incertitudes, extraits et références.
-- [x] Relier la recherche Mediastack au formulaire et tester la recherche et le chargement d’un extrait avec des réponses simulées.
-- [x] Vérifier qu’une clé Mediastack valide renvoie des articles en français pour la recherche « Maroc ». Le test a récupéré huit articles, chargé un extrait et lancé l’analyse.
+- [x] Relier NewsData.io au formulaire et tester la recherche et le chargement d’un extrait avec des réponses simulées.
+- [x] Vérifier que NewsData.io renvoie des articles récents en français avec le filtre Maroc.
 - [x] Vérifier depuis l’interface qu’un utilisateur peut coller un article, ouvrir un passage cité et comprendre le résultat lorsqu’aucune preuve suffisante n’est trouvée. Parcours vérifié dans Edge avec la démonstration et la source P01.
 
 #### 6. Enregistrer et sécuriser les analyses

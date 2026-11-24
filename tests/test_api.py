@@ -92,38 +92,45 @@ class AnalysisApiTests(unittest.TestCase):
         text_schema = schema["components"]["schemas"]["AnalysisRequest"]["properties"]["texte"]
         self.assertEqual(text_schema["maxLength"], 12_000)
 
-    def test_news_uses_apilayer_french_feed_and_validates_links(self):
-        with patch.dict(os.environ, MEDIASTACK_API_KEY="test-key"), patch(
-            "app.mediastack.HTTPSConnection"
+    def test_news_uses_newsdata_morocco_feed_and_validates_links(self):
+        with patch.dict(os.environ, NEWSDATA_API_KEY="test-key"), patch(
+            "app.newsdata.HTTPSConnection"
         ) as transport:
             upstream = MagicMock(status=200)
-            upstream.read.return_value = json.dumps({"data": [
-                {"title": "Un article", "url": "https://example.com/article"},
-                {"title": "Lien invalide", "url": "javascript:alert(1)"},
+            upstream.read.return_value = json.dumps({"status": "success", "results": [
+                {
+                    "title": "Un article",
+                    "description": "Un extrait.",
+                    "source_name": "Un journal",
+                    "pubDate": "2026-11-24 07:00:23",
+                    "link": "https://example.com/article",
+                },
+                {"title": "Lien invalide", "link": "javascript:alert(1)"},
             ]}).encode()
             transport.return_value.getresponse.return_value.__enter__.return_value = upstream
             response = self.client.get("/actualites", params={"q": "économie & emploi"})
             default_response = self.client.get("/actualites")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual([a["title"] for a in response.json()["articles"]], ["Un article"])
-        transport.assert_called_with("api.apilayer.net", timeout=10)
+        self.assertEqual(response.json()["articles"], [{
+            "title": "Un article", "description": "Un extrait.", "source": "Un journal",
+            "published_at": "2026-11-24 07:00:23", "url": "https://example.com/article",
+        }])
+        transport.assert_called_with("newsdata.io", timeout=10)
         target = urlsplit(transport.return_value.request.call_args_list[0].args[1])
-        self.assertEqual(target.path, "/mediastack/v1/news")
-        self.assertEqual(parse_qs(target.query), {
-            "access_key": ["test-key"], "languages": ["fr"],
-            "limit": ["8"], "keywords": ["économie & emploi"],
-        })
+        self.assertEqual(target.path, "/api/1/latest")
+        base_params = {"apikey": ["test-key"], "country": ["ma"], "language": ["fr"], "size": ["8"]}
+        self.assertEqual(parse_qs(target.query), {**base_params, "q": ["économie & emploi"]})
         self.assertEqual(default_response.status_code, 200)
         default_target = urlsplit(transport.return_value.request.call_args.args[1])
-        self.assertEqual(parse_qs(default_target.query)["keywords"], ["Maroc"])
+        self.assertEqual(parse_qs(default_target.query), base_params)
         self.assertNotIn("test-key", response.text)
         self.analyzer.assert_not_called()
 
     def test_news_errors_keep_provider_details_out_of_response(self):
-        with patch.dict(os.environ, MEDIASTACK_API_KEY=""):
+        with patch.dict(os.environ, NEWSDATA_API_KEY=""):
             self.assertEqual(self.client.get("/actualites").status_code, 503)
-        with patch.dict(os.environ, MEDIASTACK_API_KEY="test-key"), patch(
-            "app.mediastack.HTTPSConnection"
+        with patch.dict(os.environ, NEWSDATA_API_KEY="test-key"), patch(
+            "app.newsdata.HTTPSConnection"
         ) as transport:
             upstream = transport.return_value.getresponse.return_value.__enter__.return_value
             upstream.status = 401

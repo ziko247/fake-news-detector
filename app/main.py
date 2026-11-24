@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Request
 
 from .analysis import build_article_analyzer
-from .mediastack import NewsError, search_news
+from .newsdata import NewsError, search_news
 from .schemas import AnalysisRequest, AnalysisResponse, ErrorResponse, NewsResponse
 from .storage import initialize, save_analysis
 
@@ -55,12 +55,12 @@ def create_analysis(payload: AnalysisRequest, request: Request):
     responses={code: {"model": ErrorResponse} for code in (429, 502, 503)},
 )
 def get_news(q: Annotated[str, Query(max_length=100)] = "") -> NewsResponse:
-    api_key = os.environ.get("MEDIASTACK_API_KEY", "").strip()
+    api_key = os.environ.get("NEWSDATA_API_KEY", "").strip()
     if not api_key:
-        raise HTTPException(503, "La clé Mediastack n’est pas configurée sur le serveur.")
+        raise HTTPException(503, "La clé NewsData.io n’est pas configurée sur le serveur.")
     try:
         return search_news(api_key, q.strip())
     except NewsError as error:
         raise HTTPException(error.status_code, str(error)) from None
     except (OSError, TransportError, ValueError):
-        raise HTTPException(502, "La recherche Mediastack est temporairement indisponible.") from None
+        raise HTTPException(502, "La recherche NewsData.io est temporairement indisponible.") from None

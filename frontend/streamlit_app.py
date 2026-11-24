@@ -64,7 +64,7 @@ def load_news_article(article):
 
 with st.expander("Chercher des articles en français"):
     with st.form("news_search", border=False):
-        keywords = st.text_input("Mots-clés", max_chars=100, placeholder="Maroc par défaut")
+        keywords = st.text_input("Mots-clés", max_chars=100, placeholder="Facultatif, ex. chômage")
         search_requested = st.form_submit_button("Chercher des articles")
 
     if search_requested:
@@ -75,8 +75,8 @@ with st.expander("Chercher des articles en français"):
                 st.session_state.news = NewsResponse.model_validate_json(reply.read())
         except HTTPError as error:
             messages = {
-                429: "Le quota de recherche Mediastack est atteint.",
-                503: "Vérifiez que FastAPI utilise une clé Mediastack valide.",
+                429: "La limite de requêtes NewsData.io est atteinte.",
+                503: "Vérifiez que FastAPI utilise une clé NewsData.io valide.",
             }
             st.error(messages.get(error.code, "La recherche d’articles a échoué. Réessayez dans un instant."))
         except (URLError, OSError, HTTPException, ValueError):
@@ -90,8 +90,10 @@ with st.expander("Chercher des articles en français"):
             st.caption("Chargez le titre et le résumé dans le formulaire ou ouvrez l’article pour lire le texte complet.")
         for index, article in enumerate(articles):
             st.text(article.title)
-            if article.source:
-                st.text(article.source)
+            publication_date = article.published_at[:10] if article.published_at else None
+            details = [value for value in (article.source, publication_date) if value]
+            if details:
+                st.text(" · ".join(details))
             if article.description:
                 st.text(article.description)
             st.link_button("Lire l’article", str(article.url))
